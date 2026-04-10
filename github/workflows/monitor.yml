@@ -1,0 +1,41 @@
+name: Monitor Ticketmaster
+
+on:
+  schedule:
+    # O GitHub Actions tem um limite mínimo de 5 minutos para planos gratuitos.
+    # Esta configuração tenta rodar o mais frequente possível.
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Permite que você rode manualmente pelo botão no GitHub
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar dependências
+        run: |
+          pip install requests cloudscraper  # Adicione aqui outras libs que seu bot usa
+
+      - name: Executar Script de Monitoramento
+        env:
+          # É aqui que você esconde suas chaves secretas (veja o passo abaixo)
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python seu_script.py  # Troque pelo nome do seu arquivo
+
+      - name: Atualizar Site (GitHub Pages)
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add index.html
+          # Só faz o commit se o arquivo index.html mudar
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update monitor status [skip ci]"
+          git push
