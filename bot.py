@@ -1,4 +1,4 @@
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 import os
 from datetime import datetime, timedelta
@@ -15,33 +15,43 @@ def enviar_telegram(mensagem):
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat_id:
         url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={mensagem}"
-        requests.get(url)
+        try:
+            import requests
+            requests.get(url, timeout=10)
+        except:
+            pass
 
 def verificar():
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    resultados_html = ""
+    # Cria o scraper que tenta burlar o bloqueio 403
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
     
-    # AJUSTE DE HORA: GMT-3 (Brasília)
+    resultados_html = ""
     agora_brasil = datetime.now() - timedelta(hours=3)
     hora_formatada = agora_brasil.strftime('%d/%m/%Y %H:%M:%S')
 
     for nome, url in EVENTOS.items():
         try:
-            response = requests.get(url, headers=headers, timeout=15)
-            # Se o site bloquear o robô (erro 403), não marcamos como disponível!
+            # Tenta acessar o site com o scraper
+            response = scraper.get(url, timeout=20)
+            
             if response.status_code != 200:
                 esta_disponivel = False
-                status_texto = f"ERRO {response.status_code} (Bloqueio)"
+                status_texto = f"STATUS {response.status_code} (Bloqueio)"
                 cor = "orange"
             else:
                 soup = BeautifulSoup(response.text, "html.parser")
                 texto = soup.text.lower()
-
-                # Lista mais completa de palavras de esgotado
+                
                 termos_esgotado = ["esgotado", "indisponível", "sold out", "não há ingressos", "vendas encerradas"]
                 
-                # SÓ está disponível se o texto for grande E não tiver as palavras de esgotado
-                esta_disponivel = len(texto) > 500 and not any(p in texto for p in termos_esgotado)
+                # Critério: Se o site carregou algo real e não tem termos de esgotado
+                esta_disponivel = len(texto) > 1000 and not any(p in texto for p in termos_esgotado)
                 
                 status_texto = "DISPONÍVEL" if esta_disponivel else "ESGOTADO"
                 cor = "green" if esta_disponivel else "red"
@@ -52,15 +62,16 @@ def verificar():
                 enviar_telegram(f"🚨 INGRESSO DISPONÍVEL: {nome}\n{url}")
 
         except Exception as e:
-            resultados_html += f"<li>{nome}: Erro técnico</li>"
+            resultados_html += f"<li>{nome}: Erro de conexão</li>"
 
     html_content = f"""
     <html>
     <head><meta charset='UTF-8'><meta http-equiv='refresh' content='60'></head>
-    <body style='font-family: sans-serif; text-align: center;'>
+    <body style='font-family: sans-serif; text-align: center; padding-top: 50px;'>
         <h1>Monitor de Ingressos BTS 💜</h1>
-        <p>Última atualização (Brasília): {hora_formatada}</p>
+        <p>Última atualização (Maringá): {hora_formatada}</p>
         <ul style='list-style: none; padding: 0;'>{resultados_html}</ul>
+        <p style='font-size: 12px; color: gray;'>Bot operando via CloudScraper no GitHub Actions</p>
     </body>
     </html>
     """
